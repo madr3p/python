@@ -2,7 +2,7 @@ import os, random, pygame, sys
 from pygame.locals import *
 
 # ------------------- SETTINGS -------------------
-FPS = 15
+FPS = 60  # Smooth drawing and animations
 WINDOWWIDTH = 640
 WINDOWHEIGHT = 480
 CELLSIZE = 20
@@ -10,6 +10,10 @@ assert WINDOWWIDTH % CELLSIZE == 0, "Window width must be a multiple of cell siz
 assert WINDOWHEIGHT % CELLSIZE == 0, "Window height must be a multiple of cell size."
 CELLWIDTH = int(WINDOWWIDTH / CELLSIZE)
 CELLHEIGHT = int(WINDOWHEIGHT / CELLSIZE)
+
+# Snake speed in moves per second
+SNAKE_SPEED = 1  # 1 moves per second (adjustable)
+MOVE_DELAY = int(100 / SNAKE_SPEED)  # milliseconds per movement
 
 # Colors
 WHITE     = (255, 255, 255)
@@ -20,6 +24,7 @@ DARKGREEN = (0, 155, 0)
 DARKGRAY  = (40, 40, 40)
 BGCOLOR = BLACK
 
+# Directions
 UP = 'up'
 DOWN = 'down'
 LEFT = 'left'
@@ -76,6 +81,7 @@ def runGame():
                   {'x': startx - 2, 'y': starty}]
     direction = RIGHT
     apple = getRandomLocation()
+    lastMoveTime = pygame.time.get_ticks()
 
     while True:
         for event in pygame.event.get():
@@ -93,42 +99,48 @@ def runGame():
                 elif event.key == K_ESCAPE:
                     terminate()
 
-        # check collision
-        if wormCoords[HEAD]['x'] == -1 or wormCoords[HEAD]['x'] == CELLWIDTH \
-           or wormCoords[HEAD]['y'] == -1 or wormCoords[HEAD]['y'] == CELLHEIGHT:
-            return
-        for body in wormCoords[1:]:
-            if body['x'] == wormCoords[HEAD]['x'] and body['y'] == wormCoords[HEAD]['y']:
+        # Move snake only if enough time has passed
+        currentTime = pygame.time.get_ticks()
+        if currentTime - lastMoveTime > MOVE_DELAY:
+            # Compute new head position
+            if direction == UP:
+                newHead = {'x': wormCoords[HEAD]['x'], 'y': wormCoords[HEAD]['y'] - 1}
+            elif direction == DOWN:
+                newHead = {'x': wormCoords[HEAD]['x'], 'y': wormCoords[HEAD]['y'] + 1}
+            elif direction == LEFT:
+                newHead = {'x': wormCoords[HEAD]['x'] - 1, 'y': wormCoords[HEAD]['y']}
+            elif direction == RIGHT:
+                newHead = {'x': wormCoords[HEAD]['x'] + 1, 'y': wormCoords[HEAD]['y']}
+            wormCoords.insert(0, newHead)
+
+            # Check collisions
+            if (wormCoords[HEAD]['x'] == -1 or wormCoords[HEAD]['x'] == CELLWIDTH or
+                wormCoords[HEAD]['y'] == -1 or wormCoords[HEAD]['y'] == CELLHEIGHT):
                 return
+            for body in wormCoords[1:]:
+                if body['x'] == wormCoords[HEAD]['x'] and body['y'] == wormCoords[HEAD]['y']:
+                    return
 
-        # check apple
-        if wormCoords[HEAD]['x'] == apple['x'] and wormCoords[HEAD]['y'] == apple['y']:
-            apple = getRandomLocation()
-        else:
-            del wormCoords[-1]
+            # Check apple
+            if wormCoords[HEAD]['x'] == apple['x'] and wormCoords[HEAD]['y'] == apple['y']:
+                apple = getRandomLocation()
+            else:
+                del wormCoords[-1]
 
-        # move worm
-        if direction == UP:
-            newHead = {'x': wormCoords[HEAD]['x'], 'y': wormCoords[HEAD]['y'] - 1}
-        elif direction == DOWN:
-            newHead = {'x': wormCoords[HEAD]['x'], 'y': wormCoords[HEAD]['y'] + 1}
-        elif direction == LEFT:
-            newHead = {'x': wormCoords[HEAD]['x'] - 1, 'y': wormCoords[HEAD]['y']}
-        elif direction == RIGHT:
-            newHead = {'x': wormCoords[HEAD]['x'] + 1, 'y': wormCoords[HEAD]['y']}
-        wormCoords.insert(0, newHead)
+            lastMoveTime = currentTime
 
-        score = len(wormCoords) - 3
-        if score > highscore:
-            highscore = score
-            writeHighscore(highscore)
+            # Update highscore
+            score = len(wormCoords) - 3
+            if score > highscore:
+                highscore = score
+                writeHighscore(highscore)
 
-        # draw
+        # Draw everything
         DISPLAYSURF.fill(BGCOLOR)
         drawGrid()
         drawWorm(wormCoords)
         drawApple(apple)
-        drawScore(score, highscore)
+        drawScore(len(wormCoords) - 3, highscore)
         pygame.display.update()
         FPSCLOCK.tick(FPS)
 
