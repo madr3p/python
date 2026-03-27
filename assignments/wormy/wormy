@@ -30,6 +30,18 @@ LEFT = 'left'
 RIGHT = 'right'
 HEAD = 0
 
+# ------------------- TEXT HELPER -------------------
+def drawCenteredText(lines, center_x, center_y, font_size=24, color=WHITE, line_spacing=5):
+    font = pygame.font.Font('freesansbold.ttf', font_size)
+
+    total_height = len(lines) * font.get_height() + (len(lines)-1) * line_spacing
+    start_y = center_y - total_height // 2
+
+    for i, line in enumerate(lines):
+        surf = font.render(line, True, color)
+        rect = surf.get_rect(center=(center_x, start_y + i * (font.get_height() + line_spacing)))
+        DISPLAYSURF.blit(surf, rect)
+
 # ------------------- HIGHSCORE -------------------
 HS_FILE = "highscore.dat"
 KEY = 85
@@ -108,32 +120,27 @@ def main():
 
     pygame.init()
 
-    # 1️⃣ Create display first
     DISPLAYSURF = pygame.display.set_mode((WINDOWWIDTH, WINDOWHEIGHT))
     pygame.display.set_caption('Wormy')
     BASICFONT = pygame.font.Font('freesansbold.ttf', 18)
     FPSCLOCK = pygame.time.Clock()
 
-    # 2️⃣ Mixer & sounds
     mixer_ok = safe_init_mixer()
     if mixer_ok:
-        SND_RED = loadSound("apple_red.wav")
-        SND_GOLD = loadSound("apple_golden.wav")
-        SND_RESET = loadSound("apple_green.wav")
+        SND_RED = loadSound("eat_red.wav")
+        SND_GOLD = loadSound("eat_golden.wav")
+        SND_RESET = loadSound("eat_green.wav")
     else:
         SND_RED = SND_GOLD = SND_RESET = None
 
-    # 3️⃣ Load apple images (16x16 PNG)
     IMG_RED = pygame.image.load("apple_red.png").convert_alpha()
     IMG_GOLD = pygame.image.load("apple_golden.png").convert_alpha()
     IMG_RESET = pygame.image.load("apple_green.png").convert_alpha()
 
-    # Scale to cell size
     IMG_RED = pygame.transform.scale(IMG_RED, (CELLSIZE, CELLSIZE))
     IMG_GOLD = pygame.transform.scale(IMG_GOLD, (CELLSIZE, CELLSIZE))
     IMG_RESET = pygame.transform.scale(IMG_RESET, (CELLSIZE, CELLSIZE))
 
-    # 4️⃣ Start screen & main loop
     showStartScreen()
     while True:
         runGame()
@@ -182,7 +189,6 @@ def runGame():
 
         currentTime = pygame.time.get_ticks()
         if currentTime - lastMoveTime > move_delay:
-            # MOVE
             if direction == UP:
                 newHead = {'x': worm[HEAD]['x'], 'y': worm[HEAD]['y'] - 1}
             elif direction == DOWN:
@@ -196,12 +202,10 @@ def runGame():
             newHead['y'] %= CELLHEIGHT
             worm.insert(0, newHead)
 
-            # SELF COLLISION
             for body in worm[1:]:
                 if body['x'] == newHead['x'] and body['y'] == newHead['y']:
                     return
 
-            # APPLE CHECK
             ate = False
             for apple in apples:
                 if newHead['x'] == apple['x'] and newHead['y'] == apple['y']:
@@ -225,7 +229,6 @@ def runGame():
             if not ate:
                 del worm[-1]
 
-            # PROGRESSION
             if apples_eaten >= apple_target:
                 apple_target += 1
                 apples_eaten = 0
@@ -233,12 +236,10 @@ def runGame():
 
             lastMoveTime = currentTime
 
-            # HIGH SCORE
             if score > highscore:
                 highscore = score
                 writeHighscore(highscore)
 
-        # DRAW
         DISPLAYSURF.fill(BGCOLOR)
         drawGrid()
         drawWorm(worm)
@@ -286,22 +287,25 @@ def drawStartTitle():
     rect = surf.get_rect(center=(WINDOWWIDTH // 2, 50))
     DISPLAYSURF.blit(surf, rect)
 
-def checkForKeyPress():
-    for event in pygame.event.get():
-        if event.type == QUIT:
-            terminate()
-        elif event.type == KEYUP:
-            if event.key == K_ESCAPE:
-                terminate()
-            return event.key
-    return None
-
 def showStartScreen():
     DISPLAYSURF.fill(BGCOLOR)
     drawStartTitle()
+
+    drawCenteredText([
+        "WASD - Move",
+        "Space - Boost",
+        
+    ], WINDOWWIDTH // 2, WINDOWHEIGHT // 2, 20, WHITE)
+
     drawPressKeyMsg()
     pygame.display.update()
-    while not checkForKeyPress():
+
+    while True:
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                terminate()
+            elif event.type == KEYUP:
+                return
         FPSCLOCK.tick(FPS)
 
 def showGameOverScreen():
@@ -313,8 +317,10 @@ def showGameOverScreen():
     drawPressKeyMsg()
     pygame.display.update()
     pygame.time.wait(500)
-    while not checkForKeyPress():
-        pass
+    while True:
+        for event in pygame.event.get():
+            if event.type == KEYUP:
+                return
 
 def terminate():
     pygame.quit()
