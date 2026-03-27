@@ -10,8 +10,8 @@ CELLSIZE = 20
 assert WINDOWWIDTH % CELLSIZE == 0
 assert WINDOWHEIGHT % CELLSIZE == 0
 
-CELLWIDTH = int(WINDOWWIDTH / CELLSIZE)
-CELLHEIGHT = int(WINDOWHEIGHT / CELLSIZE)
+CELLWIDTH = WINDOWWIDTH // CELLSIZE
+CELLHEIGHT = WINDOWHEIGHT // CELLSIZE
 
 SNAKE_SPEED = 6.7
 BOOST_SPEED = 16.7
@@ -19,8 +19,6 @@ BOOST_SPEED = 16.7
 # Colors
 WHITE     = (255, 255, 255)
 BLACK     = (0, 0, 0)
-RED       = (255, 0, 0)
-GOLD      = (255, 215, 0)
 GREEN     = (0, 255, 0)
 DARKGREEN = (0, 155, 0)
 DARKGRAY  = (40, 40, 40)
@@ -56,7 +54,7 @@ def readHighscore():
     score = 0
     for i in range(SPLITS):
         score = data[i * step] ^ KEY
-    if score < 0:  # prevent negative numbers due to byte conversion
+    if score < 0:
         score = 0
     return score
 
@@ -96,7 +94,7 @@ def spawnApples(worm, apples, count):
         loc = getRandomLocation(worm, apples)
         rand = random.random()
         if rand < 0.10:
-            apples.append({'x': loc['x'], 'y': loc['y'], 'type': 'reset'})  # green reset apple
+            apples.append({'x': loc['x'], 'y': loc['y'], 'type': 'reset'})
         elif rand < 0.25:
             apples.append({'x': loc['x'], 'y': loc['y'], 'type': 'gold'})
         else:
@@ -106,8 +104,17 @@ def spawnApples(worm, apples, count):
 def main():
     global FPSCLOCK, DISPLAYSURF, BASICFONT
     global SND_RED, SND_GOLD, SND_RESET
+    global IMG_RED, IMG_GOLD, IMG_RESET
 
     pygame.init()
+
+    # 1️⃣ Create display first
+    DISPLAYSURF = pygame.display.set_mode((WINDOWWIDTH, WINDOWHEIGHT))
+    pygame.display.set_caption('Wormy')
+    BASICFONT = pygame.font.Font('freesansbold.ttf', 18)
+    FPSCLOCK = pygame.time.Clock()
+
+    # 2️⃣ Mixer & sounds
     mixer_ok = safe_init_mixer()
     if mixer_ok:
         SND_RED = loadSound("apple_red.wav")
@@ -116,11 +123,17 @@ def main():
     else:
         SND_RED = SND_GOLD = SND_RESET = None
 
-    FPSCLOCK = pygame.time.Clock()
-    DISPLAYSURF = pygame.display.set_mode((WINDOWWIDTH, WINDOWHEIGHT))
-    BASICFONT = pygame.font.Font('freesansbold.ttf', 18)
-    pygame.display.set_caption('Wormy')
+    # 3️⃣ Load apple images (16x16 PNG)
+    IMG_RED = pygame.image.load("apple_red.png").convert_alpha()
+    IMG_GOLD = pygame.image.load("apple_golden.png").convert_alpha()
+    IMG_RESET = pygame.image.load("apple_green.png").convert_alpha()
 
+    # Scale to cell size
+    IMG_RED = pygame.transform.scale(IMG_RED, (CELLSIZE, CELLSIZE))
+    IMG_GOLD = pygame.transform.scale(IMG_GOLD, (CELLSIZE, CELLSIZE))
+    IMG_RESET = pygame.transform.scale(IMG_RESET, (CELLSIZE, CELLSIZE))
+
+    # 4️⃣ Start screen & main loop
     showStartScreen()
     while True:
         runGame()
@@ -199,7 +212,7 @@ def runGame():
                         worm.extend([worm[-1]] * 3)
                         if SND_GOLD: SND_GOLD.play()
                     elif apple['type'] == 'reset':
-                        worm = worm[:3]  # reset length but keep score
+                        worm = worm[:3]
                         apples_eaten += 1
                         if SND_RESET: SND_RESET.play()
                     else:
@@ -249,12 +262,11 @@ def drawApples(apples):
     for a in apples:
         x, y = a['x']*CELLSIZE, a['y']*CELLSIZE
         if a['type'] == 'gold':
-            color = GOLD
+            DISPLAYSURF.blit(IMG_GOLD, (x,y))
         elif a['type'] == 'reset':
-            color = GREEN
+            DISPLAYSURF.blit(IMG_RESET, (x,y))
         else:
-            color = RED
-        pygame.draw.rect(DISPLAYSURF, color, (x,y,CELLSIZE,CELLSIZE))
+            DISPLAYSURF.blit(IMG_RED, (x,y))
 
 def drawGrid():
     for x in range(0, WINDOWWIDTH, CELLSIZE):
@@ -275,23 +287,21 @@ def drawStartTitle():
     DISPLAYSURF.blit(surf, rect)
 
 def checkForKeyPress():
-    if pygame.event.get(QUIT):
-        terminate()
-    keyUp = pygame.event.get(KEYUP)
-    if not keyUp: return None
-    if keyUp[0].key == K_ESCAPE: terminate()
-    return keyUp[0].key
+    for event in pygame.event.get():
+        if event.type == QUIT:
+            terminate()
+        elif event.type == KEYUP:
+            if event.key == K_ESCAPE:
+                terminate()
+            return event.key
+    return None
 
 def showStartScreen():
     DISPLAYSURF.fill(BGCOLOR)
     drawStartTitle()
     drawPressKeyMsg()
     pygame.display.update()
-
     while not checkForKeyPress():
-        for event in pygame.event.get():
-            if event.type == QUIT:
-                terminate()
         FPSCLOCK.tick(FPS)
 
 def showGameOverScreen():
