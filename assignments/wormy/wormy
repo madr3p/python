@@ -14,7 +14,7 @@ CELLWIDTH = int(WINDOWWIDTH / CELLSIZE)
 CELLHEIGHT = int(WINDOWHEIGHT / CELLSIZE)
 
 SNAKE_SPEED = 6.7
-MOVE_DELAY = int(1000 / SNAKE_SPEED)
+BOOST_SPEED = 16.7
 
 # Colors
 WHITE     = (255, 255, 255)
@@ -56,6 +56,8 @@ def readHighscore():
     score = 0
     for i in range(SPLITS):
         score = data[i * step] ^ KEY
+    if score < 0:  # prevent negative numbers due to byte conversion
+        score = 0
     return score
 
 # ------------------- SOUND -------------------
@@ -92,7 +94,10 @@ def spawnApples(worm, apples, count):
     del apples[:]
     for _ in range(count):
         loc = getRandomLocation(worm, apples)
-        if random.random() < 0.15:
+        rand = random.random()
+        if rand < 0.10:
+            apples.append({'x': loc['x'], 'y': loc['y'], 'type': 'reset'})  # green reset apple
+        elif rand < 0.25:
             apples.append({'x': loc['x'], 'y': loc['y'], 'type': 'gold'})
         else:
             apples.append({'x': loc['x'], 'y': loc['y'], 'type': 'normal'})
@@ -100,15 +105,16 @@ def spawnApples(worm, apples, count):
 # ------------------- MAIN -------------------
 def main():
     global FPSCLOCK, DISPLAYSURF, BASICFONT
-    global SND_RED, SND_GOLD
+    global SND_RED, SND_GOLD, SND_RESET
 
     pygame.init()
     mixer_ok = safe_init_mixer()
     if mixer_ok:
         SND_RED = loadSound("apple_red.wav")
         SND_GOLD = loadSound("apple_golden.wav")
+        SND_RESET = loadSound("apple_green.wav")
     else:
-        SND_RED = SND_GOLD = None
+        SND_RED = SND_GOLD = SND_RESET = None
 
     FPSCLOCK = pygame.time.Clock()
     DISPLAYSURF = pygame.display.set_mode((WINDOWWIDTH, WINDOWHEIGHT))
@@ -133,15 +139,19 @@ def runGame():
     ]
 
     direction = RIGHT
-
     apples = []
     apple_target = 1
     apples_eaten = 0
+    score = 0
 
     spawnApples(worm, apples, apple_target)
     lastMoveTime = pygame.time.get_ticks()
 
     while True:
+        keys = pygame.key.get_pressed()
+        speed = BOOST_SPEED if keys[K_SPACE] else SNAKE_SPEED
+        move_delay = int(1000 / speed)
+
         for event in pygame.event.get():
             if event.type == QUIT:
                 terminate()
@@ -158,8 +168,7 @@ def runGame():
                     terminate()
 
         currentTime = pygame.time.get_ticks()
-        if currentTime - lastMoveTime > MOVE_DELAY:
-
+        if currentTime - lastMoveTime > move_delay:
             # MOVE
             if direction == UP:
                 newHead = {'x': worm[HEAD]['x'], 'y': worm[HEAD]['y'] - 1}
@@ -170,7 +179,6 @@ def runGame():
             else:
                 newHead = {'x': worm[HEAD]['x'] + 1, 'y': worm[HEAD]['y']}
 
-            # WRAP
             newHead['x'] %= CELLWIDTH
             newHead['y'] %= CELLHEIGHT
             worm.insert(0, newHead)
@@ -187,10 +195,16 @@ def runGame():
                     apples.remove(apple)
                     if apple['type'] == 'gold':
                         apples_eaten += 3
+                        score += 3
                         worm.extend([worm[-1]] * 3)
                         if SND_GOLD: SND_GOLD.play()
+                    elif apple['type'] == 'reset':
+                        worm = worm[:3]  # reset length but keep score
+                        apples_eaten += 1
+                        if SND_RESET: SND_RESET.play()
                     else:
                         apples_eaten += 1
+                        score += 1
                         if SND_RED: SND_RED.play()
                     ate = True
                     break
@@ -206,8 +220,7 @@ def runGame():
 
             lastMoveTime = currentTime
 
-            # SCORE
-            score = len(worm) - 3
+            # HIGH SCORE
             if score > highscore:
                 highscore = score
                 writeHighscore(highscore)
@@ -217,7 +230,7 @@ def runGame():
         drawGrid()
         drawWorm(worm)
         drawApples(apples)
-        drawScore(len(worm)-3, highscore)
+        drawScore(score, highscore)
         pygame.display.update()
         FPSCLOCK.tick(FPS)
 
@@ -235,7 +248,12 @@ def drawWorm(worm):
 def drawApples(apples):
     for a in apples:
         x, y = a['x']*CELLSIZE, a['y']*CELLSIZE
-        color = GOLD if a['type']=='gold' else RED
+        if a['type'] == 'gold':
+            color = GOLD
+        elif a['type'] == 'reset':
+            color = GREEN
+        else:
+            color = RED
         pygame.draw.rect(DISPLAYSURF, color, (x,y,CELLSIZE,CELLSIZE))
 
 def drawGrid():
@@ -246,8 +264,15 @@ def drawGrid():
 
 # ------------------- UI -------------------
 def drawPressKeyMsg():
-    surf = BASICFONT.render('Press a key to play.', True, DARKGRAY)
-    DISPLAYSURF.blit(surf, (WINDOWWIDTH-200, WINDOWHEIGHT-30))
+    surf = BASICFONT.render('Press any key to play.', True, DARKGRAY)
+    rect = surf.get_rect(center=(WINDOWWIDTH // 2, WINDOWHEIGHT - 30))
+    DISPLAYSURF.blit(surf, rect)
+
+def drawStartTitle():
+    title_font = pygame.font.Font('freesansbold.ttf', 36)
+    surf = title_font.render('Wormy!', True, WHITE)
+    rect = surf.get_rect(center=(WINDOWWIDTH // 2, 50))
+    DISPLAYSURF.blit(surf, rect)
 
 def checkForKeyPress():
     if pygame.event.get(QUIT):
@@ -258,26 +283,16 @@ def checkForKeyPress():
     return keyUp[0].key
 
 def showStartScreen():
-    font = pygame.font.Font('freesansbold.ttf', 100)
-    s1 = font.render('Wormy!', True, WHITE, DARKGREEN)
-    s2 = font.render('Wormy!', True, GREEN)
-    d1 = d2 = 0
+    DISPLAYSURF.fill(BGCOLOR)
+    drawStartTitle()
+    drawPressKeyMsg()
+    pygame.display.update()
 
-    while True:
-        DISPLAYSURF.fill(BGCOLOR)
-        r1 = pygame.transform.rotate(s1, d1)
-        r2 = pygame.transform.rotate(s2, d2)
-        rect = r1.get_rect(center=(WINDOWWIDTH/2, WINDOWHEIGHT/2))
-        DISPLAYSURF.blit(r1, rect)
-        DISPLAYSURF.blit(r2, rect)
-        drawPressKeyMsg()
-        if checkForKeyPress():
-            pygame.event.get()
-            return
-        pygame.display.update()
+    while not checkForKeyPress():
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                terminate()
         FPSCLOCK.tick(FPS)
-        d1 += 3
-        d2 += 7
 
 def showGameOverScreen():
     font = pygame.font.Font('freesansbold.ttf', 150)
